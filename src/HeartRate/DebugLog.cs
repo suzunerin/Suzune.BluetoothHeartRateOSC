@@ -3,49 +3,51 @@ using System.Diagnostics;
 using System.IO;
 using System.Text;
 
-namespace HeartRate;
-
-internal class DebugLog
+namespace HeartRate
 {
-    private readonly string _name;
 
-    public DebugLog(string name)
+    internal class DebugLog
     {
-        _name = name;
-    }
+        private readonly string _name;
 
-    public void Write(string s)
-    {
-        WriteLog($"{_name}: {s}");
-    }
-
-    private static FileStream _fs = null;
-
-    public static void Initialize(string filename)
-    {
-        _fs = File.Open(filename, FileMode.Create, FileAccess.Write, FileShare.Read);
-    }
-
-    internal static string FormatLine(string s)
-    {
-        return $"{DateTime.Now}: {s}\n";
-    }
-
-    public static void WriteLog(string s)
-    {
-        Debug.WriteLine(s);
-
-        if (_fs != null)
+        public DebugLog(string name)
         {
-            var bytes = Encoding.UTF8.GetBytes(FormatLine(s));
+            _name = name;
+        }
 
-            if (_fs.Length > 1024 * 1024)
+        public void Write(string s)
+        {
+            WriteLog($"{_name}: {s}");
+        }
+
+        private static FileStream _fs = null;
+
+        public static void Initialize(string filename)
+        {
+            _fs = File.Open(filename, FileMode.Create, FileAccess.Write, FileShare.Read);
+        }
+
+        internal static string FormatLine(string s)
+        {
+            return $"{DateTime.Now}: {s}\n";
+        }
+
+        public static void WriteLog(string s)
+        {
+            Debug.WriteLine(s);
+
+            if (_fs != null)
             {
-                _fs.SetLength(0);
-            }
+                var bytes = Encoding.UTF8.GetBytes(FormatLine(s));
 
-            _fs.Write(bytes, 0, bytes.Length);
-            _fs.Flush();
+                if (_fs.Length > 1024 * 1024)
+                {
+                    _fs.SetLength(0);
+                }
+
+                _fs.Write(bytes, 0, bytes.Length);
+                _fs.Flush();
+            }
         }
     }
 }

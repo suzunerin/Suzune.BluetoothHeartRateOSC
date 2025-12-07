@@ -9,5 +9,3 @@ BluetoothHeartRateOSC(SuzuneMOD)
 
 
 C#とか詳しくないので、強引に実装したので、キレイ/正しくない実装の可能性あり。自己責任で。
-
-

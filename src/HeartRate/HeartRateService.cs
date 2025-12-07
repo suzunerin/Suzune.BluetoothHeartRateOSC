@@ -6,252 +6,254 @@ using Windows.Devices.Bluetooth.GenericAttributeProfile;
 using Windows.Devices.Enumeration;
 using Windows.Storage.Streams;
 
-namespace HeartRate;
-
-internal enum ContactSensorStatus
+namespace HeartRate
 {
-    NotSupported,
-    NotSupported2,
-    NoContact,
-    Contact
-}
 
-[Flags]
-internal enum HeartRateFlags
-{
-    None = 0,
-    IsShort = 1,
-    HasEnergyExpended = 1 << 3,
-    HasRRInterval = 1 << 4,
-}
-
-internal struct HeartRateReading
-{
-    public HeartRateFlags Flags { get; set; }
-    public ContactSensorStatus Status { get; set; }
-    public int BeatsPerMinute { get; set; }
-    public int? EnergyExpended { get; set; }
-    public int[] RRIntervals { get; set; }
-    public bool IsError { get; set; }
-    public string Error { get; set; }
-}
-
-internal interface IHeartRateService : IDisposable
-{
-    bool IsDisposed { get; }
-
-    event HeartRateService.HeartRateUpdateEventHandler HeartRateUpdated;
-    void InitiateDefault();
-    void Cleanup();
-}
-
-internal class HeartRateService : IHeartRateService
-{
-    // https://www.bluetooth.com/specifications/gatt/viewer?attributeXmlFile=org.bluetooth.characteristic.heart_rate_measurement.xml
-    private const int _heartRateMeasurementCharacteristicId = 0x2A37;
-    private static readonly Guid _heartRateMeasurementCharacteristicUuid =
-        GattDeviceService.ConvertShortIdToUuid(_heartRateMeasurementCharacteristicId);
-
-    public bool IsDisposed { get; private set; }
-
-    private GattDeviceService _service;
-    private byte[] _buffer;
-    private readonly object _disposeSync = new();
-    private readonly DebugLog _log = new(nameof(HeartRateService));
-
-    public event HeartRateUpdateEventHandler HeartRateUpdated;
-    public delegate void HeartRateUpdateEventHandler(HeartRateReading reading);
-
-    public void InitiateDefault()
+    internal enum ContactSensorStatus
     {
-        while (true)
-        {
-            try
-            {
-                InitiateDefaultCore();
-                return; // success.
-            }
-            catch (Exception e)
-            {
-                _log.Write($"InitiateDefault exception: {e}");
-
-                HeartRateUpdated?.Invoke(new HeartRateReading
-                {
-                    IsError = true,
-                    Error = e.Message
-                });
-            }
-
-            Thread.Sleep(TimeSpan.FromSeconds(2.5));
-        }
+        NotSupported,
+        NotSupported2,
+        NoContact,
+        Contact
     }
 
-    private void InitiateDefaultCore()
+    [Flags]
+    internal enum HeartRateFlags
     {
-        var heartrateSelector = GattDeviceService
-            .GetDeviceSelectorFromUuid(GattServiceUuids.HeartRate);
+        None = 0,
+        IsShort = 1,
+        HasEnergyExpended = 1 << 3,
+        HasRRInterval = 1 << 4,
+    }
 
-        var devices = DeviceInformation
-            .FindAllAsync(heartrateSelector)
-            .AsyncResult();
+    internal struct HeartRateReading
+    {
+        public HeartRateFlags Flags { get; set; }
+        public ContactSensorStatus Status { get; set; }
+        public int BeatsPerMinute { get; set; }
+        public int? EnergyExpended { get; set; }
+        public int[] RRIntervals { get; set; }
+        public bool IsError { get; set; }
+        public string Error { get; set; }
+    }
 
-        var device = devices.FirstOrDefault();
+    internal interface IHeartRateService : IDisposable
+    {
+        bool IsDisposed { get; }
 
-        if (device == null)
+        event HeartRateService.HeartRateUpdateEventHandler HeartRateUpdated;
+        void InitiateDefault();
+        void Cleanup();
+    }
+
+    internal class HeartRateService : IHeartRateService
+    {
+        // https://www.bluetooth.com/specifications/gatt/viewer?attributeXmlFile=org.bluetooth.characteristic.heart_rate_measurement.xml
+        private const int _heartRateMeasurementCharacteristicId = 0x2A37;
+        private static readonly Guid _heartRateMeasurementCharacteristicUuid =
+            GattDeviceService.ConvertShortIdToUuid(_heartRateMeasurementCharacteristicId);
+
+        public bool IsDisposed { get; private set; }
+
+        private GattDeviceService _service;
+        private byte[] _buffer;
+        private readonly object _disposeSync = new();
+        private readonly DebugLog _log = new(nameof(HeartRateService));
+
+        public event HeartRateUpdateEventHandler HeartRateUpdated;
+        public delegate void HeartRateUpdateEventHandler(HeartRateReading reading);
+
+        public void InitiateDefault()
         {
-            _log.Write("Unable to locate a device.");
-            throw new ArgumentNullException(
-                nameof(device),
-                "Unable to locate heart rate device. Ensure it's connected and paired.");
+            while (true)
+            {
+                try
+                {
+                    InitiateDefaultCore();
+                    return; // success.
+                }
+                catch (Exception e)
+                {
+                    _log.Write($"InitiateDefault exception: {e}");
+
+                    HeartRateUpdated?.Invoke(new HeartRateReading
+                    {
+                        IsError = true,
+                        Error = e.Message
+                    });
+                }
+
+                Thread.Sleep(TimeSpan.FromSeconds(2.5));
+            }
         }
 
-        _log.Write($"Found device: [Name: {device.Name}, Id: Name: {device.Id}]");
-
-        GattDeviceService service;
-
-        lock (_disposeSync)
+        private void InitiateDefaultCore()
         {
-            if (IsDisposed)
-            {
-                throw new ObjectDisposedException(GetType().Name);
-            }
+            var heartrateSelector = GattDeviceService
+                .GetDeviceSelectorFromUuid(GattServiceUuids.HeartRate);
 
-            Cleanup();
-
-            service = GattDeviceService.FromIdAsync(device.Id)
+            var devices = DeviceInformation
+                .FindAllAsync(heartrateSelector)
                 .AsyncResult();
 
-            _service = service;
-        }
+            var device = devices.FirstOrDefault();
 
-        if (service == null)
-        {
-            _log.Write("service null");
-            throw new ArgumentOutOfRangeException(
-                $"Unable to get service to {device.Name} ({device.Id}). Is the device inuse by another program? The Bluetooth adaptor may need to be turned off and on again.");
-        }
-
-        var heartrate = service
-            .GetCharacteristics(_heartRateMeasurementCharacteristicUuid)
-            .FirstOrDefault();
-
-        if (heartrate == null)
-        {
-            throw new ArgumentOutOfRangeException(
-                $"Unable to locate heart rate measurement on device {device.Name} ({device.Id}).");
-        }
-
-        _log.Write($"Service [CharacteristicProperties: {heartrate.CharacteristicProperties}, UserDescription: {heartrate.UserDescription}]");
-
-        var status = heartrate
-            .WriteClientCharacteristicConfigurationDescriptorAsync(
-                GattClientCharacteristicConfigurationDescriptorValue.Notify)
-            .AsyncResult();
-
-        heartrate.ValueChanged += HeartRate_ValueChanged;
-
-        DebugLog.WriteLog($"Started {status}");
-
-        if (status != GattCommunicationStatus.Success)
-        {
-            throw new ArgumentOutOfRangeException(
-                nameof(status), status, "Attempt to configure service failed.");
-        }
-    }
-
-    public void HeartRate_ValueChanged(
-        GattCharacteristic sender,
-        GattValueChangedEventArgs args)
-    {
-        var buffer = args.CharacteristicValue;
-        if (buffer.Length == 0) return;
-
-        var byteBuffer = Interlocked.Exchange(ref _buffer, null)
-            ?? new byte[buffer.Length];
-
-        if (byteBuffer.Length != buffer.Length)
-        {
-            byteBuffer = new byte[buffer.Length];
-        }
-
-        try
-        {
-            using var reader = DataReader.FromBuffer(buffer);
-            reader.ReadBytes(byteBuffer);
-
-            var readingValue = ReadBuffer(byteBuffer, (int)buffer.Length);
-
-            if (readingValue == null)
+            if (device == null)
             {
-                DebugLog.WriteLog($"Buffer was too small. Got {buffer.Length}.");
-                return;
+                _log.Write("Unable to locate a device.");
+                throw new ArgumentNullException(
+                    nameof(device),
+                    "Unable to locate heart rate device. Ensure it's connected and paired.");
             }
 
-            var reading = readingValue.Value;
-            DebugLog.WriteLog($"Read {reading.Flags:X} {reading.Status} {reading.BeatsPerMinute}");
+            _log.Write($"Found device: [Name: {device.Name}, Id: Name: {device.Id}]");
 
-            HeartRateUpdated?.Invoke(reading);
-        }
-        finally
-        {
-            Volatile.Write(ref _buffer, byteBuffer);
-        }
-    }
+            GattDeviceService service;
 
-    internal static HeartRateReading? ReadBuffer(byte[] buffer, int length)
-    {
-        if (length == 0) return null;
-
-        var ms = new MemoryStream(buffer, 0, length);
-        var flags = (HeartRateFlags)ms.ReadByte();
-        var isshort = flags.HasFlag(HeartRateFlags.IsShort);
-        var contactSensor = (ContactSensorStatus)(((int)flags >> 1) & 3);
-        var hasEnergyExpended = flags.HasFlag(HeartRateFlags.HasEnergyExpended);
-        var hasRRInterval = flags.HasFlag(HeartRateFlags.HasRRInterval);
-        var minLength = isshort ? 3 : 2;
-
-        if (buffer.Length < minLength) return null;
-
-        var reading = new HeartRateReading
-        {
-            Flags = flags,
-            Status = contactSensor,
-            BeatsPerMinute = isshort ? ms.ReadUInt16() : ms.ReadByte()
-        };
-
-        if (hasEnergyExpended)
-        {
-            reading.EnergyExpended = ms.ReadUInt16();
-        }
-
-        if (hasRRInterval)
-        {
-            var rrvalueCount = (buffer.Length - ms.Position) / sizeof(ushort);
-            var rrvalues = new int[rrvalueCount];
-            for (var i = 0; i < rrvalueCount; ++i)
+            lock (_disposeSync)
             {
-                rrvalues[i] = ms.ReadUInt16();
+                if (IsDisposed)
+                {
+                    throw new ObjectDisposedException(GetType().Name);
+                }
+
+                Cleanup();
+
+                service = GattDeviceService.FromIdAsync(device.Id)
+                    .AsyncResult();
+
+                _service = service;
             }
 
-            reading.RRIntervals = rrvalues;
+            if (service == null)
+            {
+                _log.Write("service null");
+                throw new ArgumentOutOfRangeException(
+                    $"Unable to get service to {device.Name} ({device.Id}). Is the device inuse by another program? The Bluetooth adaptor may need to be turned off and on again.");
+            }
+
+            var heartrate = service
+                .GetCharacteristics(_heartRateMeasurementCharacteristicUuid)
+                .FirstOrDefault();
+
+            if (heartrate == null)
+            {
+                throw new ArgumentOutOfRangeException(
+                    $"Unable to locate heart rate measurement on device {device.Name} ({device.Id}).");
+            }
+
+            _log.Write($"Service [CharacteristicProperties: {heartrate.CharacteristicProperties}, UserDescription: {heartrate.UserDescription}]");
+
+            var status = heartrate
+                .WriteClientCharacteristicConfigurationDescriptorAsync(
+                    GattClientCharacteristicConfigurationDescriptorValue.Notify)
+                .AsyncResult();
+
+            heartrate.ValueChanged += HeartRate_ValueChanged;
+
+            DebugLog.WriteLog($"Started {status}");
+
+            if (status != GattCommunicationStatus.Success)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(status), status, "Attempt to configure service failed.");
+            }
         }
 
-        return reading;
-    }
-
-    public void Cleanup()
-    {
-        var service = Interlocked.Exchange(ref _service, null);
-        service.TryDispose();
-    }
-
-    public void Dispose()
-    {
-        lock (_disposeSync)
+        public void HeartRate_ValueChanged(
+            GattCharacteristic sender,
+            GattValueChangedEventArgs args)
         {
-            IsDisposed = true;
+            var buffer = args.CharacteristicValue;
+            if (buffer.Length == 0) return;
 
-            Cleanup();
+            var byteBuffer = Interlocked.Exchange(ref _buffer, null)
+                ?? new byte[buffer.Length];
+
+            if (byteBuffer.Length != buffer.Length)
+            {
+                byteBuffer = new byte[buffer.Length];
+            }
+
+            try
+            {
+                using var reader = DataReader.FromBuffer(buffer);
+                reader.ReadBytes(byteBuffer);
+
+                var readingValue = ReadBuffer(byteBuffer, (int)buffer.Length);
+
+                if (readingValue == null)
+                {
+                    DebugLog.WriteLog($"Buffer was too small. Got {buffer.Length}.");
+                    return;
+                }
+
+                var reading = readingValue.Value;
+                DebugLog.WriteLog($"Read {reading.Flags:X} {reading.Status} {reading.BeatsPerMinute}");
+
+                HeartRateUpdated?.Invoke(reading);
+            }
+            finally
+            {
+                Volatile.Write(ref _buffer, byteBuffer);
+            }
+        }
+
+        internal static HeartRateReading? ReadBuffer(byte[] buffer, int length)
+        {
+            if (length == 0) return null;
+
+            var ms = new MemoryStream(buffer, 0, length);
+            var flags = (HeartRateFlags)ms.ReadByte();
+            var isshort = flags.HasFlag(HeartRateFlags.IsShort);
+            var contactSensor = (ContactSensorStatus)(((int)flags >> 1) & 3);
+            var hasEnergyExpended = flags.HasFlag(HeartRateFlags.HasEnergyExpended);
+            var hasRRInterval = flags.HasFlag(HeartRateFlags.HasRRInterval);
+            var minLength = isshort ? 3 : 2;
+
+            if (buffer.Length < minLength) return null;
+
+            var reading = new HeartRateReading
+            {
+                Flags = flags,
+                Status = contactSensor,
+                BeatsPerMinute = isshort ? ms.ReadUInt16() : ms.ReadByte()
+            };
+
+            if (hasEnergyExpended)
+            {
+                reading.EnergyExpended = ms.ReadUInt16();
+            }
+
+            if (hasRRInterval)
+            {
+                var rrvalueCount = (buffer.Length - ms.Position) / sizeof(ushort);
+                var rrvalues = new int[rrvalueCount];
+                for (var i = 0; i < rrvalueCount; ++i)
+                {
+                    rrvalues[i] = ms.ReadUInt16();
+                }
+
+                reading.RRIntervals = rrvalues;
+            }
+
+            return reading;
+        }
+
+        public void Cleanup()
+        {
+            var service = Interlocked.Exchange(ref _service, null);
+            service.TryDispose();
+        }
+
+        public void Dispose()
+        {
+            lock (_disposeSync)
+            {
+                IsDisposed = true;
+
+                Cleanup();
+            }
         }
     }
 }

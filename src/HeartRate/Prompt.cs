@@ -1,78 +1,80 @@
 ﻿using System.Drawing;
 using System.Windows.Forms;
 
-namespace HeartRate;
-
-internal static class Prompt
+namespace HeartRate
 {
-    public static bool TryColor(Color current, out Color color)
+
+    internal static class Prompt
     {
-        color = default;
-
-        using var dlg = new ColorDialog
+        public static bool TryColor(Color current, out Color color)
         {
-            Color = current
-        };
+            color = default;
 
-        if (dlg.ShowDialog() != DialogResult.OK) return false;
+            using var dlg = new ColorDialog
+            {
+                Color = current
+            };
 
-        color = dlg.Color;
-        return true;
-    }
+            if (dlg.ShowDialog() != DialogResult.OK) return false;
 
-    public static bool TryFont(
-        string currentFont,
-        FontStyle currentStyle,
-        int currentSize,
-        out Font font)
-    {
-        font = default;
+            color = dlg.Color;
+            return true;
+        }
 
-        // Even though it's not really in "points," this prevents it from converting our PX size to Points, and
-        // any conversion roundings that would happen.
-        using var dlgFont = new Font(currentFont, currentSize, currentStyle, GraphicsUnit.Point);
-        using var dlg = new FontDialog
+        public static bool TryFont(
+            string currentFont,
+            FontStyle currentStyle,
+            int currentSize,
+            out Font font)
         {
-            FontMustExist = true,
-            Font = dlgFont
-        };
+            font = default;
 
-        if (dlg.ShowDialog() != DialogResult.OK) return false;
+            // Even though it's not really in "points," this prevents it from converting our PX size to Points, and
+            // any conversion roundings that would happen.
+            using var dlgFont = new Font(currentFont, currentSize, currentStyle, GraphicsUnit.Point);
+            using var dlg = new FontDialog
+            {
+                FontMustExist = true,
+                Font = dlgFont
+            };
 
-        font = dlg.Font;
-        return true;
-    }
+            if (dlg.ShowDialog() != DialogResult.OK) return false;
 
-    public static bool TryFile(string current, string filter, out string file)
-    {
-        file = default;
+            font = dlg.Font;
+            return true;
+        }
 
-        using var dlg = new OpenFileDialog
+        public static bool TryFile(string current, string filter, out string file)
         {
-            CheckFileExists = true,
-            FileName = current,
-            Filter = filter
-        };
+            file = default;
 
-        if (dlg.ShowDialog() != DialogResult.OK) return false;
+            using var dlg = new OpenFileDialog
+            {
+                CheckFileExists = true,
+                FileName = current,
+                Filter = filter
+            };
 
-        file = dlg.FileName;
-        return true;
-    }
+            if (dlg.ShowDialog() != DialogResult.OK) return false;
 
-    public static bool TrySaveFile(string current, string filter, out string file)
-    {
-        file = default;
+            file = dlg.FileName;
+            return true;
+        }
 
-        using var dlg = new SaveFileDialog
+        public static bool TrySaveFile(string current, string filter, out string file)
         {
-            FileName = current,
-            Filter = filter
-        };
+            file = default;
 
-        if (dlg.ShowDialog() != DialogResult.OK) return false;
+            using var dlg = new SaveFileDialog
+            {
+                FileName = current,
+                Filter = filter
+            };
 
-        file = dlg.FileName;
-        return true;
+            if (dlg.ShowDialog() != DialogResult.OK) return false;
+
+            file = dlg.FileName;
+            return true;
+        }
     }
 }
