@@ -1,8 +1,8 @@
-BluetoothHeartRateOSC
+BluetoothHeartRateOSC(SuzuneMOD)
 =====================
 
-The addresses of Int and Float type parameters can be changed in setting.xml respectively. See forked project for details.  
-settings.xmlでIntとFloatのアドレスをそれぞれ変更出来ます。詳しくはフォーク元プロジェクトを御覧ください。
+フォーク元からの変更点
+・Logの場所が正しくSetting.xmlで指定できていなかったため、出力先の設定が効くように変更。
+・HeartRateの閾値が、以前使っていた環境では-1→1だったのがフォークもとでは0→1でVRChat内でズレてしまうため、-1→1に変更。
 
-HRIntAddress and HRFloatAddress are concatenated as strings after "/avatar/parameters/".  
-HRIntAddressとHRFloatAddressは"/avatar/parameters/"の後に文字列として結合されます。
+C#とか詳しくないので、強引に実装したので、キレイ/正しくない実装の可能性あり。自己責任で。
